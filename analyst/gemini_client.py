@@ -9,6 +9,9 @@ from google.api_core import exceptions
 
 # ... imports ...
 
+# Load API key from environment
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 def configure_gemini(api_key=None):
     key = api_key or GEMINI_API_KEY
     if key:
