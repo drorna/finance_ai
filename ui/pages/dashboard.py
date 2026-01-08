@@ -225,7 +225,7 @@ def show(user_id):
                                 db.add(new_asset)
                             
                             # Add Transaction
-                            txn = Transaction(user_id=user_id, symbol=symbol_to_sell, transaction_type="BUY", quantity=qty, price=price, timestamp=datetime.now())
+                            txn = Transaction(user_id=user_id, symbol=symbol, transaction_type="BUY", quantity=qty, price=price, timestamp=datetime.now())
                             db.add(txn)
                             db.commit()
                             st.success(f"Bought {qty} {symbol}")
@@ -310,7 +310,8 @@ def show(user_id):
             
             # --- News State Management ---
             # Create a unique key for the cache based on filter and symbols
-            cache_key = f"news_{news_filter}_{len(symbols)}"
+            symbols_hash = "_".join(sorted(symbols)) if symbols else "empty"
+            cache_key = f"news_{news_filter}_{symbols_hash}"
             
             if 'news_cache' not in st.session_state:
                 st.session_state['news_cache'] = {}
@@ -646,8 +647,9 @@ def show(user_id):
                  if os.path.exists("sp500.csv"):
                      sp500 = pd.read_csv("sp500.csv")
                  else:
-                     # Fallback to known location
-                     sp500 = pd.read_csv(r"c:\Users\nadel\.gemini\antigravity\scratch\FinanceAI\sp500.csv")
+                     # Fallback to project root
+                     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                     sp500 = pd.read_csv(os.path.join(project_root, "sp500.csv"))
                      
                  all_sectors = sorted([str(s) for s in sp500['Sector'].unique().tolist() if str(s) != 'nan'])
              except Exception as e:
@@ -669,128 +671,143 @@ def show(user_id):
         if btn_scan:
              from quant.market_scanner import MarketScanner
              scanner = MarketScanner()
-             
+
              prog_bar = st.progress(0)
              status_text = st.empty()
-             
+
              def update_progress(p):
                  prog_bar.progress(p)
                  status_text.text(f"Scanning Market... {int(p*100)}%")
-                 
+
              # Run Scan
              results_df = scanner.scan_market(sectors=sel_sectors, volatility=vol_param, limit=scan_limit, progress_callback=update_progress)
-             
+
              if results_df.empty:
                  st.warning("לא נמצאו מניות העונות לקריטריונים.")
+                 st.session_state.scanner_results = None
+                 st.session_state.scanner_clusters = None
              else:
                  clusters = scanner.analyze_clusters(results_df)
-                 
+
+                 # שמירת התוצאות ב-session_state
+                 st.session_state.scanner_results = results_df
+                 st.session_state.scanner_clusters = clusters
+
                  st.success(f"Scan Complete! Processed {len(results_df)} stocks.")
                  status_text.empty()
-                 
-                 # --- DISPLAY CLUSTERS (HEBREW UX) ---
-                 st.markdown("#### 🧠 תובנות סקטוריאליות (Sector Intelligence)")
-                 
-                 for sector, data in clusters.items():
-                     dna = data.get('DNA_Centroid', {})
-                     alpha = data.get('Alpha')
-                     
-                     # Translate Sector Names (Basic Mapping)
-                     sector_he = sector
-                     sector_map = {
-                         'Information Technology': 'טכנולוגיה', 'Health Care': 'בריאות', 
-                         'Financials': 'פיננסים', 'Consumer Discretionary': 'צריכה מחזורית',
-                         'Communication Services': 'תקשורת', 'Industrials': 'תעשייה',
-                         'Consumer Staples': 'צריכה בסיסית', 'Energy': 'אנרגיה',
-                         'Utilities': 'תשתיות', 'Real Estate': 'נדל"ן', 'Materials': 'חומרי גלם'
-                     }
-                     if sector in sector_map: sector_he = sector_map[sector]
-    
-                     with st.expander(f"📂 {sector_he} (תוספת תשואה: {alpha})", expanded=True):
-                         c1, c2, c3 = st.columns(3)
-                         c1.metric("ממוצע טריגר מכירה", dna.get('Avg_Sell_Trigger'))
-                         c2.metric("ממוצע קנייה בירידה", dna.get('Avg_Buy_Trigger'))
-                         c3.metric("סגנון מסחר", dna.get('Style'))
-                 
-                 st.divider()
-    
-             # --- FULL RESULTS TABLE ---
-             st.markdown("#### 📜 תוצאות הסריקה המלאות")
-             st.info("💡 לחץ על שורה בטבלה כדי לראות ניתוח עומק וציר זמן")
 
-             # Helper to describe strategy in Hebrew
-             def describe_strat(row):
-                 try:
-                     # Sell Parsing
-                     s_triggers = [float(x) for x in str(row['Sell_Triggers']).split(',') if x]
-                     if not s_triggers: return "ללא מכירה"
-                     first_sell = s_triggers[0]
-                     
-                     if len(s_triggers) > 2:
-                         desc = "סולם מימושים (Ladder)"
-                     elif len(s_triggers) == 1 and first_sell > 0.25:
-                         desc = "Moonbag (יעד רחוק)"
-                     elif first_sell < 0.08:
-                         desc = "קציר מהיר (Scalping)"
-                     else:
-                         desc = "מימוש סטנדרטי"
+        # --- DISPLAY RESULTS FROM SESSION STATE ---
+        # תצוגת התוצאות - עובד גם אחרי rerun!
+        if 'scanner_results' in st.session_state and st.session_state.scanner_results is not None:
+            results_df = st.session_state.scanner_results
+            clusters = st.session_state.scanner_clusters
+
+            # Import scanner for drill-down feature
+            from quant.market_scanner import MarketScanner
+            scanner = MarketScanner()
+
+            # --- DISPLAY CLUSTERS (HEBREW UX) ---
+            st.markdown("#### 🧠 תובנות סקטוריאליות (Sector Intelligence)")
+
+            for sector, data in clusters.items():
+                dna = data.get('DNA_Centroid', {})
+                alpha = data.get('Alpha')
+
+                # Translate Sector Names (Basic Mapping)
+                sector_he = sector
+                sector_map = {
+                    'Information Technology': 'טכנולוגיה', 'Health Care': 'בריאות',
+                    'Financials': 'פיננסים', 'Consumer Discretionary': 'צריכה מחזורית',
+                    'Communication Services': 'תקשורת', 'Industrials': 'תעשייה',
+                    'Consumer Staples': 'צריכה בסיסית', 'Energy': 'אנרגיה',
+                    'Utilities': 'תשתיות', 'Real Estate': 'נדל"ן', 'Materials': 'חומרי גלם'
+                }
+                if sector in sector_map: sector_he = sector_map[sector]
+
+                with st.expander(f"📂 {sector_he} (תוספת תשואה: {alpha})", expanded=False):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("ממוצע טריגר מכירה", dna.get('Avg_Sell_Trigger'))
+                    c2.metric("ממוצע קנייה בירידה", dna.get('Avg_Buy_Trigger'))
+                    c3.metric("סגנון מסחר", dna.get('Style'))
+
+            st.divider()
+            # --- FULL RESULTS TABLE ---
+            st.markdown("#### 📜 תוצאות הסריקה המלאות")
+            st.info("💡 לחץ על שורה בטבלה כדי לראות ניתוח עומק וציר זמן")
+
+            # Helper to describe strategy in Hebrew
+            def describe_strat(row):
+                try:
+                    # Sell Parsing
+                    s_triggers = [float(x) for x in str(row['Sell_Triggers']).split(',') if x]
+                    if not s_triggers: return "ללא מכירה"
+                    first_sell = s_triggers[0]
+                    
+                    if len(s_triggers) > 2:
+                        desc = "סולם מימושים (Ladder)"
+                    elif len(s_triggers) == 1 and first_sell > 0.25:
+                        desc = "Moonbag (יעד רחוק)"
+                    elif first_sell < 0.08:
+                        desc = "קציר מהיר (Scalping)"
+                    else:
+                        desc = "מימוש סטנדרטי"
+                        
+                    # Buy Parsing
+                    b_triggers = [float(x) for x in str(row['Buy_Triggers']).split(',') if x]
+                    if b_triggers:
+                         if len(b_triggers) > 2: desc += " + אגירה (Martingale)"
+                         elif abs(b_triggers[0]) > 0.15: desc += " + קניית עומק"
+                         else: desc += " + קנייה דינמית"
                          
-                     # Buy Parsing
-                     b_triggers = [float(x) for x in str(row['Buy_Triggers']).split(',') if x]
-                     if b_triggers:
-                          if len(b_triggers) > 2: desc += " + אגירה (Martingale)"
-                          elif abs(b_triggers[0]) > 0.15: desc += " + קניית עומק"
-                          else: desc += " + קנייה דינמית"
-                          
-                     return desc
-                 except:
-                     return "מותאם אישית"
+                    return desc
+                except:
+                    return "מותאם אישית"
 
-             # Rename for Display
-             display_df = results_df.copy()
-             display_df['תיאור האסטרטגיה'] = display_df.apply(describe_strat, axis=1)
-             
-             display_df = display_df.rename(columns={
-                 'Ticker': 'סימול',
-                 'Sector': 'סקטור',
-                 'Return': 'תשואת אסטרטגיה',
-                 'Buy_Hold': 'תשואת שוק'
-             })
-             # Format as %
-             display_df['תשואת אסטרטגיה'] = display_df['תשואת אסטרטגיה'].apply(lambda x: f"{x*100:.2f}%")
-             display_df['תשואת שוק'] = display_df['תשואת שוק'].apply(lambda x: f"{x*100:.2f}%")
-             
-             # INTERACTIVE TABLE
-             event = st.dataframe(
-                 display_df[['סימול', 'סקטור', 'תיאור האסטרטגיה', 'תשואת אסטרטגיה', 'תשואת שוק']],
-                 use_container_width=True,
-                 on_select="rerun",
-                 selection_mode="single-row"
-             )
-             
-             selected_rows = event.selection.rows
-             selected_ticker = None
-             if selected_rows:
-                 idx = selected_rows[0]
-                 selected_ticker = display_df.iloc[idx]['סימול']
+            # Rename for Display
+            display_df = results_df.copy()
+            display_df['תיאור האסטרטגיה'] = display_df.apply(describe_strat, axis=1)
+            
+            display_df = display_df.rename(columns={
+                'Ticker': 'סימול',
+                'Sector': 'סקטור',
+                'Return': 'תשואת אסטרטגיה',
+                'Buy_Hold': 'תשואת שוק'
+            })
+            # Format as %
+            display_df['תשואת אסטרטגיה'] = display_df['תשואת אסטרטגיה'].apply(lambda x: f"{x*100:.2f}%")
+            display_df['תשואת שוק'] = display_df['תשואת שוק'].apply(lambda x: f"{x*100:.2f}%")
+            
+            # INTERACTIVE TABLE
+            event = st.dataframe(
+                display_df[['סימול', 'סקטור', 'תיאור האסטרטגיה', 'תשואת אסטרטגיה', 'תשואת שוק']],
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+            
+            selected_rows = event.selection.rows
+            selected_ticker = None
+            if selected_rows:
+                idx = selected_rows[0]
+                selected_ticker = display_df.iloc[idx]['סימול']
 
-             # --- DRILL DOWN FEATURE ---
-             st.divider()
-             st.subheader("🔍 מעבדה: ניתוח עומק למניה")
-             
-             # Logic for auto-analysis if row clicked
-             if selected_ticker:
-                 st.markdown(f"**נבחרה מניה:** `{selected_ticker}`")
-                 if st.button(f"הצג דוח מלא עבור {selected_ticker}", type="primary"):
-                     with st.spinner(f"מבצע Deep Grind על {selected_ticker}..."):
-                          stock_data = scanner.fetch_data(selected_ticker)
-                          if stock_data is not None:
-                               engine = PolicyBacktester(selected_ticker, stock_data)
-                               result = engine.run_exhaustive_optimization(audit_mode=True)
-                               
-                               render_detailed_strategy_view(selected_ticker, stock_data, result, f"scan_{selected_ticker}")
-                               st.success("הניתוח הושלם. גלול למעלה לציר הזמן.")
-                          else:
-                               st.error("לא ניתן למשוך נתונים.")
-             else:
-                 st.info("בחר מניה מהטבלה למעלה כדי להתחיל.")
+            # --- DRILL DOWN FEATURE ---
+            st.divider()
+            st.subheader("🔍 מעבדה: ניתוח עומק למניה")
+            
+            # Logic for auto-analysis if row clicked
+            if selected_ticker:
+                st.markdown(f"**נבחרה מניה:** `{selected_ticker}`")
+                if st.button(f"הצג דוח מלא עבור {selected_ticker}", type="primary"):
+                    with st.spinner(f"מבצע Deep Grind על {selected_ticker}..."):
+                         stock_data = scanner.fetch_data(selected_ticker)
+                         if stock_data is not None:
+                              engine = PolicyBacktester(selected_ticker, stock_data)
+                              result = engine.run_exhaustive_optimization(audit_mode=True)
+                              
+                              render_detailed_strategy_view(selected_ticker, stock_data, result, f"scan_{selected_ticker}")
+                              st.success("הניתוח הושלם. גלול למעלה לציר הזמן.")
+                         else:
+                              st.error("לא ניתן למשוך נתונים.")
+            else:
+                st.info("בחר מניה מהטבלה למעלה כדי להתחיל.")
