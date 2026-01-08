@@ -16,6 +16,137 @@ from datetime import datetime
 # Load environment variables
 load_dotenv()
 
+# --- HELPER: RENDER DEEP GRIND VIEW ---
+def render_detailed_strategy_view(ticker, df_history, engine_result, unique_key):
+    """
+    Reusable component to show Strategy DNA, Audit Log, and Simulator.
+    """
+    best_ret = engine_result.get('best_return', 0) * 100
+    best_params = engine_result.get('best_params', {})
+    audit_df = engine_result.get('audit_df')
+
+    # Compare to Buy & Hold (approx)
+    bh_ret = (df_history['Close'].iloc[-1] / df_history['Close'].iloc[0] - 1) * 100
+
+    st.markdown(f"### 🏆 אסטרטגיה מנצחת לחברת {ticker} (תשואה: {best_ret:.2f}%)")
+    st.caption(f"לעומת החזקה פסיבית (Buy & Hold): {bh_ret:.2f}%)")
+
+    # Adapt to Multi-Tier Arrays
+    s_out_trigs = best_params.get('scale_out_triggers', [])
+    s_out_amts = best_params.get('scale_out_amts', [])
+    s_in_trigs = best_params.get('scale_in_triggers', [])
+    s_in_amts = best_params.get('scale_in_amts', [])
+
+    # Helper to display formatted tiers
+    def format_tiers(trigs, amts, is_buy=False):
+        lines = []
+        if len(trigs) == 0: return "ללא פעולות"
+
+        for i in range(len(trigs)):
+            t = trigs[i] if i < len(trigs) else 0
+            a = amts[i] if i < len(amts) else 0
+
+            pct_trig = t * 100
+            pct_amt = a * 100
+            if is_buy:
+                lines.append(f"• ירידה של **{abs(pct_trig):.0f}%** ⬅️ קנה ב-**{pct_amt:.0f}%** מהפוזיציה")
+            else:
+                if t < 0:
+                    lines.append(f"• 🛑 ירידה של **{abs(pct_trig):.0f}%** (Stop Loss) ⬅️ מכור **{pct_amt:.0f}%**")
+                else:
+                    lines.append(f"• עלייה של **{pct_trig:.0f}%** ⬅️ מכור **{pct_amt:.0f}%** מהכמות")
+        return "<br>".join(lines)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.success(f"**💰 לקיחת רווחים (Scale Out):**")
+        st.markdown(format_tiers(s_out_trigs, s_out_amts, False), unsafe_allow_html=True)
+    with c2:
+        st.error(f"**📉 בניה בירידות (Scale In):**")
+        st.markdown(format_tiers(s_in_trigs, s_in_amts, True), unsafe_allow_html=True)
+
+    st.divider()
+
+    # Audit Log
+    with st.expander("📊 הצג את כל האסטרטגיות שנבדקו (Audit Log)"):
+        st.dataframe(audit_df, use_container_width=True)
+
+    # Timeline
+    try:
+        debug_eng = PolicyBacktester(ticker, df_history)
+        val, best_logs = debug_eng.simulate_policy_debug(
+            debug_eng.closes, debug_eng.dates, 10000.0,
+            s_out_trigs, s_out_amts,
+            s_in_trigs, s_in_amts,
+            0.40
+        )
+
+        with st.expander("📜 ציר זמן עסקאות (Timeline) - אסטרטגיה מנצחת", expanded=False):
+            if best_logs:
+                logs_df = pd.DataFrame(best_logs)
+                st.dataframe(
+                    logs_df.style.apply(lambda x: ['background-color: #d4edda' if 'TAKE' in str(r) else 'background-color: #f8d7da' if 'BUY' in str(r) else '' for r in x['Action']], axis=1),
+                    use_container_width=True
+                )
+            else:
+                st.info("האסטרטגיה המנצחת לא ביצעה פעולות בתקופה זו (Buy & Hold?).")
+    except Exception as e:
+        st.error(f"Error generating timeline: {e}")
+
+    st.divider()
+
+    # Custom Simulator
+    st.markdown("#### 🧪 סימולטור טקטי (מדרגות)")
+    with st.form(f"sim_form_{unique_key}"):
+        c_s1, c_s2 = st.columns(2)
+        def_s_trigs = ",".join([str(int(x*100)) for x in s_out_trigs])
+        def_s_amts = ",".join([str(int(x*100)) for x in s_out_amts])
+        def_b_trigs = ",".join([str(int(x*100)) for x in s_in_trigs])
+        def_b_amts = ",".join([str(int(x*100)) for x in s_in_amts])
+
+        with c_s1:
+            st.markdown("**מכירה (Sell)**")
+            st.caption("טריגרים חיוביים לרווח, שליליים ל-Stop Loss")
+            user_s_trigs_str = st.text_input("Triggers % (e.g. 10,20,-5)", value=def_s_trigs, key=f"{unique_key}_s_trigs")
+            user_s_amts_str = st.text_input("Amounts % (e.g. 50,50,100)", value=def_s_amts, key=f"{unique_key}_s_amts")
+        with c_s2:
+            st.markdown("**קניה (Buy)**")
+            st.caption("טריגרים שליליים לקנייה בירידות")
+            user_b_trigs_str = st.text_input("Dip Triggers % (e.g. -5,-10)", value=def_b_trigs, key=f"{unique_key}_b_trigs")
+            user_b_amts_str = st.text_input("Buy Amounts % (Position)", value=def_b_amts, key=f"{unique_key}_b_amts")
+
+        run_sim = st.form_submit_button("הרץ סימולציה אישית")
+
+        if run_sim:
+            try:
+                u_s_t = [float(x.strip())/100 for x in user_s_trigs_str.split(',') if x.strip()]
+                u_s_a = [float(x.strip())/100 for x in user_s_amts_str.split(',') if x.strip()]
+                u_b_t = [float(x.strip())/100 for x in user_b_trigs_str.split(',') if x.strip()]
+                u_b_a = [float(x.strip())/100 for x in user_b_amts_str.split(',') if x.strip()]
+
+                temp_engine = PolicyBacktester(ticker, df_history)
+                val, logs = temp_engine.simulate_policy_debug(
+                    temp_engine.closes, temp_engine.dates, 10000.0,
+                    u_s_t, u_s_a,
+                    u_b_t, u_b_a,
+                    0.40
+                )
+                sim_ret = (val / 10000.0 - 1) * 100
+
+                st.markdown(f"**תוצאת הסימולציה:** תשואה של **{sim_ret:.2f}%** (שווי סופי: ${val:.2f})")
+
+                if logs:
+                    logs_df = pd.DataFrame(logs)
+                    st.markdown("##### 📜 יומן פעולות (Timeline)")
+                    st.dataframe(
+                        logs_df.style.apply(lambda x: ['background-color: #d4edda' if 'TAKE' in str(r) else 'background-color: #f8d7da' if 'BUY' in str(r) else '' for r in x['Action']], axis=1),
+                        use_container_width=True
+                    )
+                else:
+                    st.info("לא בוצעו פעולות.")
+            except Exception as e:
+                st.error(f"שגיאה בנתונים: {e}")
+
 def show(user_id):
     # Retrieve DB session
     db = next(get_db())
@@ -40,149 +171,6 @@ def show(user_id):
     
     portfolio_data = analyze_portfolio(portfolio) if portfolio else {}
 
-    # --- HELPER: RENDER DEEP GRIND VIEW ---
-    def render_detailed_strategy_view(ticker, df_history, engine_result, unique_key):
-        """
-        Reusable component to show Strategy DNA, Audit Log, and Simulator.
-        """
-        best_ret = engine_result.get('best_return', 0) * 100
-        best_params = engine_result.get('best_params', {})
-        audit_df = engine_result.get('audit_df')
-        
-        # Compare to Buy & Hold (approx)
-        bh_ret = (df_history['Close'].iloc[-1] / df_history['Close'].iloc[0] - 1) * 100
-        
-        st.markdown(f"### 🏆 אסטרטגיה מנצחת לחברת {ticker} (תשואה: {best_ret:.2f}%)")
-        st.caption(f"לעומת החזקה פסיבית (Buy & Hold): {bh_ret:.2f}%")
-        
-        # Adapt to Multi-Tier Arrays
-        s_out_trigs = best_params.get('scale_out_triggers', [])
-        s_out_amts = best_params.get('scale_out_amts', [])
-        s_in_trigs = best_params.get('scale_in_triggers', [])
-        s_in_amts = best_params.get('scale_in_amts', [])
-        
-        # Helper to display formatted tiers
-        def format_tiers(trigs, amts, is_buy=False):
-            lines = []
-            if len(trigs) == 0: return "ללא פעולות"
-            
-            for i in range(len(trigs)):
-                # Handle array indexing safely
-                t = trigs[i] if i < len(trigs) else 0
-                a = amts[i] if i < len(amts) else 0
-                
-                pct_trig = t * 100
-                pct_amt = a * 100
-                if is_buy:
-                        lines.append(f"• ירידה של **{abs(pct_trig):.0f}%** ⬅️ קנה ב-**{pct_amt:.0f}%** מהפוזיציה")
-                else:
-                        # Check for Stop Loss (Negative Trigger)
-                        if t < 0:
-                            lines.append(f"• 🛑 ירידה של **{abs(pct_trig):.0f}%** (Stop Loss) ⬅️ מכור **{pct_amt:.0f}%**")
-                        else:
-                            lines.append(f"• עלייה של **{pct_trig:.0f}%** ⬅️ מכור **{pct_amt:.0f}%** מהכמות")
-            return "<br>".join(lines)
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.success(f"**💰 לקיחת רווחים (Scale Out):**")
-            st.markdown(format_tiers(s_out_trigs, s_out_amts, False), unsafe_allow_html=True)
-        with c2:
-            st.error(f"**📉 בניה בירידות (Scale In):**")
-            st.markdown(format_tiers(s_in_trigs, s_in_amts, True), unsafe_allow_html=True)
-        
-        st.divider()
-        
-        # Audit Log (Expandable)
-        with st.expander("📊 הצג את כל האסטרטגיות שנבדקו (Audit Log)"):
-            st.dataframe(audit_df, use_container_width=True)
-        
-        # --- WINNING STRATEGY TIMELINE ---
-        # We run a quick debug sim using the best parameters to get the specific trade logs
-        try:
-            debug_eng = PolicyBacktester(ticker, df_history)
-            val, best_logs = debug_eng.simulate_policy_debug(
-                debug_eng.closes, debug_eng.dates, 10000.0,
-                s_out_trigs, s_out_amts, # Use Best Params
-                s_in_trigs, s_in_amts,
-                0.40
-            )
-            
-            with st.expander("📜 ציר זמן עסקאות (Timeline) - אסטרטגיה מנצחת", expanded=False):
-                if best_logs:
-                    logs_df = pd.DataFrame(best_logs)
-                    st.dataframe(
-                        logs_df.style.apply(lambda x: ['background-color: #d4edda' if 'TAKE' in str(r) else 'background-color: #f8d7da' if 'BUY' in str(r) else '' for r in x['Action']], axis=1),
-                        use_container_width=True
-                    )
-                else:
-                    st.info("האסטרטגיה המנצחת לא ביצעה פעולות בתקופה זו (Buy & Hold?).")
-        except Exception as e:
-            st.error(f"Error generating timeline: {e}")
-
-        st.divider()
-        
-        # --- CUSTOM SIMULATOR (MULTI-TIER) ---
-        st.markdown("#### 🧪 סימולטור טקטי (מדרגות)")
-        with st.form(f"sim_form_{unique_key}"):
-            c_s1, c_s2 = st.columns(2)
-            # Input as comma separated strings
-            def_s_trigs = ",".join([str(int(x*100)) for x in s_out_trigs])
-            def_s_amts = ",".join([str(int(x*100)) for x in s_out_amts])
-            def_b_trigs = ",".join([str(int(x*100)) for x in s_in_trigs])
-            def_b_amts = ",".join([str(int(x*100)) for x in s_in_amts])
-            
-            with c_s1:
-                st.markdown("**מכירה (Sell)**")
-                st.caption("טריגרים חיוביים לרווח, שליליים ל-Stop Loss")
-                user_s_trigs_str = st.text_input("Triggers % (e.g. 10,20,-5)", value=def_s_trigs)
-                user_s_amts_str = st.text_input("Amounts % (e.g. 50,50,100)", value=def_s_amts)
-            with c_s2:
-                st.markdown("**קניה (Buy)**")
-                st.caption("טריגרים שליליים לקנייה בירידות")
-                user_b_trigs_str = st.text_input("Dip Triggers % (e.g. -5,-10)", value=def_b_trigs)
-                user_b_amts_str = st.text_input("Buy Amounts % (Position)", value=def_b_amts)
-            
-            run_sim = st.form_submit_button("הרץ סימולציה אישית")
-            
-            if run_sim:
-                try:
-                    # Parse Inputs
-                    u_s_t = [float(x.strip())/100 for x in user_s_trigs_str.split(',') if x.strip()]
-                    u_s_a = [float(x.strip())/100 for x in user_s_amts_str.split(',') if x.strip()]
-                    u_b_t = [float(x.strip())/100 for x in user_b_trigs_str.split(',') if x.strip()]
-                    u_b_a = [float(x.strip())/100 for x in user_b_amts_str.split(',') if x.strip()]
-                    
-                    # Re-init engine just for simulation logic access (static methods mostly)
-                    # We need closures/dates from the passed df_history
-                    # engine_instance = PolicyBacktester(ticker, df_history) # Already available? No passed in.
-                    # We can just use the static method directly but we need data.
-                    # We will re-instantiate lightly.
-                    temp_engine = PolicyBacktester(ticker, df_history)
-                    
-                    val, logs = temp_engine.simulate_policy_debug(
-                        temp_engine.closes, temp_engine.dates, 10000.0,
-                        u_s_t, u_s_a,
-                        u_b_t, u_b_a,
-                        0.40
-                    )
-                    sim_ret = (val / 10000.0 - 1) * 100
-                    
-                    st.markdown(f"**תוצאת הסימולציה:** תשואה של **{sim_ret:.2f}%** (שווי סופי: ${val:.2f})")
-                    
-                    if logs:
-                        logs_df = pd.DataFrame(logs)
-                        st.markdown("##### 📜 יומן פעולות (Timeline)")
-                        st.dataframe(
-                            logs_df.style.apply(lambda x: ['background-color: #d4edda' if 'TAKE' in str(r) else 'background-color: #f8d7da' if 'BUY' in str(r) else '' for r in x['Action']], axis=1),
-                            use_container_width=True
-                        )
-                    else:
-                        st.info("לא בוצעו פעולות.")
-                except Exception as e:
-                    st.error(f"שגיאה בנתונים: {e}")
-
-    
     # Fetch User for Cash Balance
     user_obj = db.query(User).filter(User.id == user_id).first()
     cash_balance = user_obj.cash_balance if user_obj else 0.0
