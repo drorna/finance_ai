@@ -1,0 +1,11 @@
+streamlit
+sqlalchemy
+yfinance
+google-generativeai
+pandas
+python-dotenv
+plotly
+passlib
+argon2-cffi
+numba
+ddgs

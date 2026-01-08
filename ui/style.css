@@ -1,0 +1,352 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@100;300;400;500;700;900&display=swap');
+
+:root {
+    --bg-color: #050505;
+    /* True Black/Deep Gray */
+    --card-bg: #111111;
+    /* Slightly lighter for cards */
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --accent-color: #D4AF37;
+    /* Gold/Elite */
+    --accent-glow: rgba(212, 175, 55, 0.3);
+    --success: #27ae60;
+    --danger: #c0392b;
+}
+
+/* --- Global Reset & Base --- */
+.stApp {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: 'Heebo', sans-serif !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: 'Heebo', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.5px;
+    color: var(--text-primary) !important;
+}
+
+p,
+div,
+span,
+label {
+    font-family: 'Heebo', sans-serif !important;
+}
+
+/* RTL Global - Scoped to content to prevent layout breaking */
+.stMarkdown,
+.stTextInput,
+.stButton,
+.stDataFrame,
+.stSelectbox,
+.stDateInput,
+.stNumberInput,
+[data-testid="stSidebar"] {
+    direction: rtl;
+    text-align: right;
+}
+
+/* Fix Scrollbar Issue: Keep the shell LTR */
+.stApp {
+    direction: ltr;
+}
+
+/* Force Main Block to be Right Aligned */
+section[data-testid="stMain"] {
+    direction: rtl;
+}
+
+/* Align text elements */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+div {
+    text-align: right;
+}
+
+/* --- Sidebar --- */
+section[data-testid="stSidebar"] {
+    background-color: #0a0a0a;
+    border-left: 1px solid #222;
+}
+
+section[data-testid="stSidebar"] h1 {
+    font-size: 1.5rem !important;
+    text-align: center;
+    background: linear-gradient(to right, #ffffff, #888888);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* --- Elite Cards --- */
+.titan-card {
+    background: var(--card-bg);
+    border: 1px solid #222;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    margin-bottom: 24px;
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.titan-card:hover {
+    transform: translateY(-5px);
+    border-color: #333;
+}
+
+.titan-metric-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+}
+
+.titan-metric-value {
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: var(--text-primary);
+    line-height: 1.1;
+}
+
+.titan-metric-value.positive {
+    color: var(--success);
+}
+
+.titan-metric-value.negative {
+    color: var(--danger);
+}
+
+/* --- Inputs Cleanup --- */
+/* --- Inputs Cleanup --- */
+/* Completely override Streamlit's default white background assumption */
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input {
+    background-color: #111111 !important;
+    /* Force Dark Background */
+    color: #ffffff !important;
+    /* Force White Text */
+    caret-color: #D4AF37 !important;
+    /* Gold Cursor */
+    border: 1px solid #333 !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+}
+
+/* Fix Focus/Hover States to prevent "White Flash" */
+.stTextInput input:focus,
+.stNumberInput input:focus,
+.stDateInput input:focus,
+.stTextInput input:hover,
+.stNumberInput input:hover,
+.stDateInput input:hover {
+    background-color: #000000 !important;
+    border-color: #D4AF37 !important;
+    /* Gold Border on Focus */
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.2) !important;
+    color: #ffffff !important;
+}
+
+/* Fix Placeholder Color */
+::placeholder {
+    color: #555 !important;
+    opacity: 1 !important;
+}
+
+.stNumb
+
+/* Fix Inputs and Select Boxes to be visible */
+div[data-baseweb="input"],
+div[data-baseweb="select"] {
+    background-color: #1e1e1e !important;
+    color: white !important;
+    border: 1px solid #333 !important;
+    border-radius: 5px !important;
+}
+
+.stSelectbox div[data-baseweb="select"] div {
+    color: white !important;
+    -webkit-text-fill-color: white !important;
+}
+
+/* --- Dropdown / Popover / Menu Fixes --- */
+div[data-baseweb="popover"],
+div[data-baseweb="menu"],
+ul[data-baseweb="menu"] {
+    background-color: #111111 !important;
+    border: 1px solid #333 !important;
+}
+
+li[data-baseweb="option"] {
+    color: #e0e0e0 !important;
+    background-color: #111111 !important;
+}
+
+li[data-baseweb="option"]:hover,
+li[data-baseweb="option"][aria-selected="true"] {
+    background-color: #D4AF37 !important;
+    color: #000000 !important;
+}
+
+/* Fix selected value display in the box */
+div[data-baseweb="select"]>div {
+    background-color: #1e1e1e !important;
+    color: #ffffff !important;
+    border-color: #333 !important;
+}
+
+/* Fix SVG icons (arrows) in select box */
+div[data-baseweb="select"] svg {
+    fill: #ffffff !important;
+}
+
+/* Helper labels styling */
+label[data-testid="stWidgetLabel"] {
+    color: #a0a0a0 !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
+
+/* --- Buttons --- */
+/* --- Buttons --- */
+.stButton>button {
+    background: #111111 !important;
+    color: #D4AF37 !important;
+    /* Gold Text */
+    border: 1px solid #D4AF37 !important;
+    border-radius: 8px;
+    padding: 8px 20px;
+    /* Reduced padding to fit small buttons too */
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.85rem;
+    transition: all 0.3s;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.stButton>button * {
+    color: #D4AF37 !important;
+}
+
+.stButton>button:hover {
+    background: #D4AF37 !important;
+    color: #000000 !important;
+    /* Black text on Gold hover */
+    border-color: #D4AF37 !important;
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+    transform: translateY(-2px);
+}
+
+.stButton>button:hover * {
+    color: #000000 !important;
+}
+
+/* --- FORCE LABELS VISIBILITY --- */
+label,
+.stSelectbox label,
+.stTextInput label,
+.stNumberInput label,
+.stDateInput label {
+    color: #e0e0e0 !important;
+    /* Light Grey */
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+}
+
+/* --- FORCE INPUT TEXT VISIBILITY --- */
+div[data-baseweb="select"]>div,
+input.st-ai,
+input.st-ah {
+    color: #ffffff !important;
+}
+
+/* --- Specific fix for Form Submit Buttons which might have different class --- */
+button[kind="secondaryFormSubmit"] {
+    background: #111111 !important;
+    color: #D4AF37 !important;
+    border: 1px solid #D4AF37 !important;
+}
+
+/* --- Tables --- */
+div[data-testid="stDataFrame"] {
+    background-color: transparent;
+    border: none;
+}
+
+div[data-testid="stDataFrame"] div[class^="st"] {
+    border: none !important;
+    color: var(--text-secondary);
+}
+
+/* Headers of tables */
+div[data-testid="stDataFrame"] div[role="columnheader"] {
+    background-color: #1a1a1a !important;
+    color: var(--text-primary) !important;
+    font-weight: bold;
+    border-bottom: 1px solid #333 !important;
+}
+
+/* --- Custom Badge --- */
+.status-badge {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 50px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.bull-mode {
+    background: rgba(39, 174, 96, 0.15);
+    color: #27ae60;
+    border: 1px solid rgba(39, 174, 96, 0.3);
+}
+
+.bear-mode {
+    background: rgba(192, 57, 43, 0.15);
+    color: #c0392b;
+    border: 1px solid rgba(192, 57, 43, 0.3);
+}
+
+/* --- Animations --- */
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-up {
+    animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.delay-1 {
+    animation-delay: 0.1s;
+}
+
+.delay-2 {
+    animation-delay: 0.2s;
+}
+
+.delay-3 {
+    animation-delay: 0.3s;
+}
